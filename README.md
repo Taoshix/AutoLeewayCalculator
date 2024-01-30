@@ -4,6 +4,7 @@ Automatic spinner leeway calculator for [osu!](https://osu.ppy.sh/)
 When osu! is running, the program will automatically calculate the spinner leeways on the maps you select in song select.
 Input your own mods or use whatever mods you have selected ingame.
 Enable/Disable leaderboard lookups to avoid sending spam requests.
+
 ![image](https://github.com/Taoshix/AutoLeewayCalculator/assets/9339576/b3d651ce-955c-4387-a142-44057f522a8a)
 
 ## Manual Mode
