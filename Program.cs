@@ -75,6 +75,7 @@ namespace LeewayCalculator
                         string currentReadModsBinary = "";
                         while (!Console.KeyAvailable)
                         {
+                            SetWindowAlwaysOnTop(SettingsManager.GetSetting(3).State);
                             reader.TryReadProperty(map, "Id", out object ID);
                             reader.TryReadProperty(osuBaseAddresses.GeneralData, nameof(GeneralData.Mods), out var emilly);
                             if (!reader.CanRead || ID == null)
@@ -309,6 +310,15 @@ namespace LeewayCalculator
                 }
             }
             Console.WriteLine();
+        }
+
+        private static void SetWindowAlwaysOnTop(bool isTop)
+        {
+            IntPtr mainWindowHandle = Process.GetCurrentProcess().MainWindowHandle;
+            if (isTop)
+                SetWindowPos(mainWindowHandle, new IntPtr(-1), 0, 0, 0, 0, 3);
+            else
+                SetWindowPos(mainWindowHandle, new IntPtr(-2), 0, 0, 0, 0, 3);
         }
 
         private static void PrintIntroduction()
