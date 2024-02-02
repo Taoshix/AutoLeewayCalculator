@@ -16,19 +16,17 @@ using System.Diagnostics;
 using OsuMemoryDataProvider.OsuMemoryModels.Abstract;
 using System.Linq.Expressions;
 using AutomaticLeewayCalculator;
-using static LeewayCalculator.Program;
 using System.Runtime.InteropServices;
 
 namespace LeewayCalculator
 {
     public static partial class Program
     {
-        private static StructuredOsuMemoryReader reader;
-        private static bool autoCalc = false;
-        private static string songsFolder = "";
-        private static string username = "";
-        private static SettingsManager SettingsManager = new SettingsManager();
-        private static List<Setting> Settings = new List<Setting>();
+        private static StructuredOsuMemoryReader _reader;
+        private static bool _autoCalc = false;
+        private static string _songsFolder = "";
+        private static string _userName = "";
+        private static SettingsManager _settingsManager = new SettingsManager(new List<Setting>());
 
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -37,16 +35,15 @@ namespace LeewayCalculator
         private static void Main(string[] args)
         {
             Program.LeewayCalculator leewayCalculator = new Program.LeewayCalculator();
-            SettingsManager.AddSetting(1, "!", "Leaderboard Lookups", "Toggle whether or not to show the leaderboard lookups", true);
-            SettingsManager.AddSetting(2, "?", "Use Ingame Mods", "Toggle whether or not to use the mods you have ingame", true);
-            SettingsManager.AddSetting(3, "*", "Always on Top", "Toggle whether or not the window should be always on top", false);
-            Settings = SettingsManager.GetSettings();
-            reader = StructuredOsuMemoryReader.Instance.GetInstanceForWindowTitleHint("");
+            _settingsManager.AddSetting(1, "!", "Leaderboard Lookups", "Toggle whether or not to show the leaderboard lookups", true);
+            _settingsManager.AddSetting(2, "?", "Use Ingame Mods", "Toggle whether or not to use the mods you have ingame", true);
+            _settingsManager.AddSetting(3, "*", "Always on Top", "Toggle whether or not the window should be always on top", false);
+            _reader = StructuredOsuMemoryReader.Instance.GetInstanceForWindowTitleHint("");
             
             PrintIntroduction();
 
-            autoCalc = Console.ReadLine().ToLower() == "y";
-            if (autoCalc)
+            _autoCalc = Console.ReadLine().ToLower() == "y";
+            if (_autoCalc)
             {
             start:
                 bool changeMods = false;
@@ -55,7 +52,7 @@ namespace LeewayCalculator
 
                 OsuBaseAddresses osuBaseAddresses = new OsuBaseAddresses();
                 GetOsuProcess();
-                PrintSettings(Settings, true);
+                PrintSettings(_settingsManager, true);
 
                 Console.Write("Input mods, setting flags, or leave blank for 4 mod and then press ENTER: ");
                 string modInput = Console.ReadLine();
@@ -75,10 +72,10 @@ namespace LeewayCalculator
                         string currentReadModsBinary = "";
                         while (!Console.KeyAvailable)
                         {
-                            SetWindowAlwaysOnTop(SettingsManager.GetSetting(3).State);
-                            reader.TryReadProperty(map, "Id", out object ID);
-                            reader.TryReadProperty(osuBaseAddresses.GeneralData, nameof(GeneralData.Mods), out var emilly);
-                            if (!reader.CanRead || ID == null)
+                            SetWindowAlwaysOnTop(_settingsManager.GetSetting(3).State);
+                            _reader.TryReadProperty(map, "Id", out object ID);
+                            _reader.TryReadProperty(osuBaseAddresses.GeneralData, nameof(GeneralData.Mods), out var emilly);
+                            if (!_reader.CanRead || ID == null)
                             {
                                 Console.WriteLine("osu! closed down");
                                 goto start;
@@ -86,33 +83,34 @@ namespace LeewayCalculator
                             int mapId = (int)ID;
                             string readModsBinary = Convert.ToString((int)emilly, 2).PadLeft(32, '0');
 
-                            if (currentMapID != mapId || (currentReadModsBinary != readModsBinary && SettingsManager.GetSetting(2).State))
+                            if (currentMapID != mapId || (currentReadModsBinary != readModsBinary && _settingsManager.GetSetting(2).State))
                             {
                                 currentMapID = mapId;
                                 currentReadModsBinary = readModsBinary;
-                                reader.TryReadProperty(map, "FolderName", out object mapFolder);
-                                reader.TryReadProperty(map, "OsuFileName", out object mapFileName);
+                                _reader.TryReadProperty(map, "FolderName", out object mapFolder);
+                                _reader.TryReadProperty(map, "OsuFileName", out object mapFileName);
 
                                 if (mapFolder != null && mapFileName != null)
                                 {
-                                    string absoluteFilename = Path.Combine(songsFolder, ((string)mapFolder).TrimEnd(), ((string)mapFileName).TrimEnd());
+                                    string absoluteFilename = Path.Combine(_songsFolder, ((string)mapFolder).TrimEnd(), ((string)mapFileName).TrimEnd());
                                     string beatmap = File.ReadAllText(absoluteFilename);
                                     string[] mods;
-                                    mods = SettingsManager.GetSetting(2).State ? leewayCalculator.GetMods(leewayCalculator.ReorderMods(ModsFromBinaryString(readModsBinary))) : leewayCalculator.GetMods(leewayCalculator.ReorderMods(modInput));
+                                    mods = _settingsManager.GetSetting(2).State ? leewayCalculator.GetMods(leewayCalculator.ReorderMods(ModsFromBinaryString(readModsBinary))) : leewayCalculator.GetMods(leewayCalculator.ReorderMods(modInput));
                                     if (!leewayCalculator.IsValidModCombo(mods))
-                                        mods = (string[])null;
+                                        mods = null;
                                     Console.Clear();
                                     Console.WriteLine("Automatic Mode - Press ESC to change mods/settings\n");
-                                    PrintSettings(Settings, false);
-                                    leewayCalculator.PrintTable(mapId, beatmap, mods, SettingsManager.GetSetting(1).State);
+                                    PrintSettings(_settingsManager, false);
+                                    leewayCalculator.PrintTable(mapId, beatmap, mods, _settingsManager.GetSetting(1).State);
                                 }
                             }
-                            Console.Title = $"AutomaticLeewayCalculator - Automatic Mode - {mapId} +{(SettingsManager.GetSetting(2).State ? leewayCalculator.ReorderMods(ModsFromBinaryString(readModsBinary)) : leewayCalculator.ReorderMods(modInput))}";
+                            Console.Title = $"AutomaticLeewayCalculator - Automatic Mode - {mapId} +{(_settingsManager.GetSetting(2).State ? leewayCalculator.ReorderMods(ModsFromBinaryString(readModsBinary)) : leewayCalculator.ReorderMods(modInput))}";
                             Thread.Sleep(50);
                         }
                     } while (Console.ReadKey(true).Key != ConsoleKey.Escape);
-                    PrintSettings(Settings, true);
+                    PrintSettings(_settingsManager, true);
                     Console.Write("Input new mods, setting flags, or leave blank for 4 mod and then press ENTER to continue: ");
+
                     modInput = Console.ReadLine();
                     modInput = ParseSettings(modInput);
                     if (modInput == "" && !changeMods)
@@ -148,36 +146,29 @@ namespace LeewayCalculator
                         Console.Clear();
                     try
                     {
-                        string[] mods = (string[])null;
+                        string[] mods = null;
                         string beatmap;
                         int beatmapId;
                         if (Regex.IsMatch(input, "^\"(.*?)\".*?([A-Za-z]+)?$"))
                         {
                             Match match = Regex.Match(input, "^\"(.*?)\".*?([A-Za-z]+)?$");
-                            beatmap = System.IO.File.ReadAllText(match.Groups[1].Value);
+                            beatmap = File.ReadAllText(match.Groups[1].Value);
                             beatmapId = leewayCalculator.GetBeatmapID(beatmap);
                             if (!string.IsNullOrEmpty(match.Groups[2].Value))
                                 mods = leewayCalculator.GetMods(leewayCalculator.ReorderMods(match.Groups[2].Value.ToUpper()));
                         }
                         else if (input.Split(' ')[0] == "current")
                         {
-                            string newMods = "";
-                            if (input.Split(' ').Length == 1)
-                            {
-                                newMods = "HDHRDTFL";
-                            }
-                            else
-                            {
-                                newMods = input.Split(' ')[1].ToUpper().Replace("+", "");
-                            }
+                            string newMods = input.Split(' ').Length == 1 ? "HDHRDTFL" : input.Split(' ')[1].ToUpper().Replace("+", "");
                             mods = leewayCalculator.GetMods(leewayCalculator.ReorderMods(newMods));
+
                             GetOsuProcess();
                             CurrentBeatmap map = new CurrentBeatmap();
-                            reader.TryReadProperty(map, "Id", out object ID);
+                            _reader.TryReadProperty(map, "Id", out object ID);
                             int mapId = (int)ID;
-                            reader.TryReadProperty(map, "FolderName", out object mapFolder);
-                            reader.TryReadProperty(map, "OsuFileName", out object mapFileName);
-                            string absoluteFilename = Path.Combine(songsFolder, ((string)mapFolder).TrimEnd(), ((string)mapFileName).TrimEnd());
+                            _reader.TryReadProperty(map, "FolderName", out object mapFolder);
+                            _reader.TryReadProperty(map, "OsuFileName", out object mapFileName);
+                            string absoluteFilename = Path.Combine(_songsFolder, ((string)mapFolder).TrimEnd(), ((string)mapFileName).TrimEnd());
                             beatmapId = mapId;
                             beatmap = File.ReadAllText(absoluteFilename);
 
@@ -191,12 +182,12 @@ namespace LeewayCalculator
                             {
                                 throw new Exception($"Unable to download beatmap with id {beatmapId}, does it exist?");
                             }
-                            mods = (string[])null;
+                            mods = null;
                             if (!string.IsNullOrEmpty(match.Groups[2].Value))
                                 mods = leewayCalculator.GetMods(leewayCalculator.ReorderMods(match.Groups[2].Value.ToUpper()));
                         }
                         if (!leewayCalculator.IsValidModCombo(mods))
-                            mods = (string[])null;
+                            mods = null;
                         Console.WriteLine("Manual Mode");
                         Console.Title = $"AutomaticLeewayCalculator - Manual Mode - {beatmapId} +{leewayCalculator.ReorderMods(leewayCalculator.GetModsString(mods))}";
                         leewayCalculator.PrintTable(beatmapId, beatmap, mods, true);
@@ -217,11 +208,11 @@ namespace LeewayCalculator
         private static string ParseSettings(string modInput)
         {
             modInput = modInput.Replace("+", "");
-            foreach (var setting in Settings)
+            foreach (var setting in _settingsManager.GetSettings())
             {
                 if (modInput.Contains(setting.Prefix))
                 {
-                    SettingsManager.ToggleSetting(setting.Id);
+                    _settingsManager.ToggleSetting(setting.Id);
                     modInput = modInput.Replace(setting.Prefix.ToString(), "");
                 }
             }
@@ -272,28 +263,27 @@ namespace LeewayCalculator
         private static void GetOsuProcess()
         {
             Process[] processes = Process.GetProcessesByName("osu!");
-            if (processes.Length == 0 || !reader.CanRead || processes[0].HasExited)
+            if (processes.Length == 0 || !_reader.CanRead || processes[0].HasExited)
             {
                 Console.WriteLine("\nosu! is not running, please start osu!");
                 Console.WriteLine("Waiting...");
-                while (processes.Length == 0 || !reader.CanRead || processes[0].HasExited)
+                while (processes.Length == 0 || !_reader.CanRead || processes[0].HasExited)
                 {
                     processes = Process.GetProcessesByName("osu!");
                     Thread.Sleep(50);
                 }
             }
-            BanchoUser user = new BanchoUser();
-            user.IsLoggedIn = true;
             OsuBaseAddresses osuBaseAddresses = new OsuBaseAddresses();
-            reader.TryRead(osuBaseAddresses.BanchoUser);
-            username = osuBaseAddresses.BanchoUser.Username;
+            _reader.TryRead(osuBaseAddresses.BanchoUser);
+            _userName = osuBaseAddresses.BanchoUser.Username;
             Console.Clear();
             string osuExePath = processes[0].MainModule.FileName;
-            songsFolder = Path.Combine(Path.GetDirectoryName(osuExePath), "Songs");
+            _songsFolder = Path.Combine(Path.GetDirectoryName(osuExePath), "Songs");
         }
 
-        private static void PrintSettings(List<Setting> settings, bool showInstructions)
+        private static void PrintSettings(SettingsManager settingsManager, bool showInstructions)
         {
+            var settings = settingsManager.GetSettings();
             foreach (var setting in settings)
             {
                 Console.Write($"{setting.Name}: ");
