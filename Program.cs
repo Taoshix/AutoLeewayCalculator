@@ -20,7 +20,7 @@ using System.Runtime.InteropServices;
 
 namespace LeewayCalculator
 {
-    public static partial class Program
+    public class Program
     {
         private static StructuredOsuMemoryReader _reader;
         private static bool _autoCalc = false;
@@ -34,7 +34,7 @@ namespace LeewayCalculator
 
         private static void Main(string[] args)
         {
-            Program.LeewayCalculator leewayCalculator = new Program.LeewayCalculator();
+            LeewayCalculator leewayCalculator = new LeewayCalculator();
             _settingsManager.AddSetting(1, "!", "Leaderboard Lookups", "Toggle whether or not to show the leaderboard lookups", true);
             _settingsManager.AddSetting(2, "?", "Use Ingame Mods", "Toggle whether or not to use the mods you have ingame", true);
             _settingsManager.AddSetting(3, "*", "Always on Top", "Toggle whether or not the window should be always on top", false);
@@ -45,163 +45,161 @@ namespace LeewayCalculator
             _autoCalc = Console.ReadLine().ToLower() == "y";
             if (_autoCalc)
             {
-            start:
-                bool changeMods = false;
-
-                Console.WriteLine("\nAutomatic Mode");
-
-                OsuBaseAddresses osuBaseAddresses = new OsuBaseAddresses();
-                GetOsuProcess();
-                PrintSettings(_settingsManager, true);
-
-                Console.Write("Input mods, setting flags, or leave blank for 4 mod and then press ENTER: ");
-                string modInput = Console.ReadLine();
-                modInput = ParseSettings(modInput);
-                if (modInput == "")
-                {
-                    modInput = "HDHRDTFL";
-                }
-                string savedMods = modInput;
-                CurrentBeatmap map = new CurrentBeatmap();
-
-                while (true)
-                {
-                    do
-                    {
-                        int currentMapID = 0;
-                        string currentReadModsBinary = "";
-                        while (!Console.KeyAvailable)
-                        {
-                            SetWindowAlwaysOnTop(_settingsManager.GetSetting(3).State);
-                            _reader.TryReadProperty(map, "Id", out object ID);
-                            _reader.TryReadProperty(osuBaseAddresses.GeneralData, nameof(GeneralData.Mods), out var emilly);
-                            if (!_reader.CanRead || ID == null)
-                            {
-                                Console.WriteLine("osu! closed down");
-                                goto start;
-                            }
-                            int mapId = (int)ID;
-                            string readModsBinary = Convert.ToString((int)emilly, 2).PadLeft(32, '0');
-
-                            if (currentMapID != mapId || (currentReadModsBinary != readModsBinary && _settingsManager.GetSetting(2).State))
-                            {
-                                currentMapID = mapId;
-                                currentReadModsBinary = readModsBinary;
-                                _reader.TryReadProperty(map, "FolderName", out object mapFolder);
-                                _reader.TryReadProperty(map, "OsuFileName", out object mapFileName);
-
-                                if (mapFolder != null && mapFileName != null)
-                                {
-                                    string absoluteFilename = Path.Combine(_songsFolder, ((string)mapFolder).TrimEnd(), ((string)mapFileName).TrimEnd());
-                                    string beatmap = File.ReadAllText(absoluteFilename);
-                                    string[] mods;
-                                    mods = _settingsManager.GetSetting(2).State ? leewayCalculator.GetMods(leewayCalculator.ReorderMods(ModsFromBinaryString(readModsBinary))) : leewayCalculator.GetMods(leewayCalculator.ReorderMods(modInput));
-                                    if (!leewayCalculator.IsValidModCombo(mods))
-                                        mods = null;
-                                    Console.Clear();
-                                    Console.WriteLine("Automatic Mode - Press ESC to change mods/settings\n");
-                                    PrintSettings(_settingsManager, false);
-                                    leewayCalculator.PrintTable(mapId, beatmap, mods, _settingsManager.GetSetting(1).State);
-                                }
-                            }
-                            Console.Title = $"AutomaticLeewayCalculator - Automatic Mode - {mapId} +{(_settingsManager.GetSetting(2).State ? leewayCalculator.ReorderMods(ModsFromBinaryString(readModsBinary)) : leewayCalculator.ReorderMods(modInput))}";
-                            Thread.Sleep(50);
-                        }
-                    } while (Console.ReadKey(true).Key != ConsoleKey.Escape);
-                    PrintSettings(_settingsManager, true);
-                    Console.Write("Input new mods, setting flags, or leave blank for 4 mod and then press ENTER to continue: ");
-
-                    modInput = Console.ReadLine();
-                    modInput = ParseSettings(modInput);
-                    if (modInput == "" && !changeMods)
-                    {
-                        modInput = "HDHRDTFL";
-                    }
-                    else if (modInput == "" && changeMods)
-                    {
-                        modInput = savedMods;
-                    }
-                    changeMods = false;
-                    savedMods = modInput;
-                }
+                AutomaticMode(leewayCalculator);
             }
             else
             {
-                Console.WriteLine("\nManual Mode");
-                Console.WriteLine("Add a \"!\" at the start to toggle auto-clear.");
-                Console.WriteLine("If osu! is running, you can type \"current\" instead of the ID to get the current map you are looking at in song select.");
-                Console.Write("Enter Beatmap ID (+Mods): ");
+                ManualMode(leewayCalculator);
+            }
+        }
 
-                string input = Console.ReadLine().Trim();
-                bool flag = true;
-                while (true)
+        private static void AutomaticMode(LeewayCalculator leewayCalculator)
+        {
+            OsuBaseAddresses osuBaseAddresses = new OsuBaseAddresses();
+            CurrentBeatmap map = new CurrentBeatmap();
+            string modInput;
+            string savedMods;
+            Console.WriteLine("\nAutomatic Mode");
+
+            GetOsuProcess();
+            PrintSettings(_settingsManager, true);
+
+            Console.Write("Input mods, setting flags, or leave blank for 4 mod and then press ENTER: ");
+            modInput = Console.ReadLine();
+            modInput = ParseSettings(modInput);
+            modInput = string.IsNullOrEmpty(modInput) ? "HDHRDTFL" : modInput;
+            
+            while (true)
+            {
+                do
                 {
-                    Console.WriteLine();
-                    if (input.StartsWith("!"))
+                    int currentMapID = 0;
+                    string currentReadModsBinary = "";
+                    while (!Console.KeyAvailable)
                     {
-                        flag = !flag;
-                        input = input.TrimStart('!');
-                    }
-                    if (flag)
-                        Console.Clear();
-                    try
-                    {
-                        string[] mods = null;
-                        string beatmap;
-                        int beatmapId;
-                        if (Regex.IsMatch(input, "^\"(.*?)\".*?([A-Za-z]+)?$"))
+                        SetWindowAlwaysOnTop(_settingsManager.GetSetting(3).State);
+                        _reader.TryReadProperty(map, "Id", out object ID);
+                        _reader.TryReadProperty(osuBaseAddresses.GeneralData, nameof(GeneralData.Mods), out var emilly);
+                        if (!_reader.CanRead || ID == null)
                         {
-                            Match match = Regex.Match(input, "^\"(.*?)\".*?([A-Za-z]+)?$");
-                            beatmap = File.ReadAllText(match.Groups[1].Value);
-                            beatmapId = leewayCalculator.GetBeatmapID(beatmap);
-                            if (!string.IsNullOrEmpty(match.Groups[2].Value))
-                                mods = leewayCalculator.GetMods(leewayCalculator.ReorderMods(match.Groups[2].Value.ToUpper()));
+                            Console.WriteLine("osu! closed down");
+                            AutomaticMode(leewayCalculator);
                         }
-                        else if (input.Split(' ')[0] == "current")
-                        {
-                            string newMods = input.Split(' ').Length == 1 ? "HDHRDTFL" : input.Split(' ')[1].ToUpper().Replace("+", "");
-                            mods = leewayCalculator.GetMods(leewayCalculator.ReorderMods(newMods));
+                        int mapId = (int)ID;
+                        string readModsBinary = Convert.ToString((int)emilly, 2).PadLeft(32, '0');
 
-                            GetOsuProcess();
-                            CurrentBeatmap map = new CurrentBeatmap();
-                            _reader.TryReadProperty(map, "Id", out object ID);
-                            int mapId = (int)ID;
-                            _reader.TryReadProperty(map, "FolderName", out object mapFolder);
-                            _reader.TryReadProperty(map, "OsuFileName", out object mapFileName);
-                            string absoluteFilename = Path.Combine(_songsFolder, ((string)mapFolder).TrimEnd(), ((string)mapFileName).TrimEnd());
-                            beatmapId = mapId;
-                            beatmap = File.ReadAllText(absoluteFilename);
-
-                        }
-                        else
+                        if (currentMapID != mapId || (currentReadModsBinary != readModsBinary && _settingsManager.GetSetting(2).State))
                         {
-                            Match match = Regex.Match(input, ".*(?:\\D|^)(\\d+).*?([A-Za-z]+)?$");
-                            beatmapId = int.Parse(match.Groups[1].Value);
-                            beatmap = leewayCalculator.GetBeatmap(beatmapId);
-                            if (beatmap == "")
+                            currentMapID = mapId;
+                            currentReadModsBinary = readModsBinary;
+                            if (_reader.TryReadProperty(map, "FolderName", out object mapFolder) && _reader.TryReadProperty(map, "OsuFileName", out object mapFileName))
                             {
-                                throw new Exception($"Unable to download beatmap with id {beatmapId}, does it exist?");
+                                string absoluteFilename = Path.Combine(_songsFolder, ((string)mapFolder).TrimEnd(), ((string)mapFileName).TrimEnd());
+                                string beatmap = File.ReadAllText(absoluteFilename);
+                                string[] mods = _settingsManager.GetSetting(2).State ? leewayCalculator.GetMods(leewayCalculator.ReorderMods(ModsFromBinaryString(readModsBinary))) : leewayCalculator.GetMods(leewayCalculator.ReorderMods(modInput));
+
+                                if (!leewayCalculator.IsValidModCombo(mods))
+                                {
+                                    mods = null;
+                                }
+
+                                Console.Clear();
+                                Console.WriteLine("Automatic Mode - Press ESC to change mods/settings\n");
+                                PrintSettings(_settingsManager, false);
+                                leewayCalculator.PrintTable(mapId, beatmap, mods, _settingsManager.GetSetting(1).State, _userName);
                             }
-                            mods = null;
-                            if (!string.IsNullOrEmpty(match.Groups[2].Value))
-                                mods = leewayCalculator.GetMods(leewayCalculator.ReorderMods(match.Groups[2].Value.ToUpper()));
                         }
-                        if (!leewayCalculator.IsValidModCombo(mods))
-                            mods = null;
-                        Console.WriteLine("Manual Mode");
-                        Console.Title = $"AutomaticLeewayCalculator - Manual Mode - {beatmapId} +{leewayCalculator.ReorderMods(leewayCalculator.GetModsString(mods))}";
-                        leewayCalculator.PrintTable(beatmapId, beatmap, mods, true);
+                        Console.Title = $"AutomaticLeewayCalculator - Automatic Mode - {mapId} +{(_settingsManager.GetSetting(2).State ? leewayCalculator.ReorderMods(ModsFromBinaryString(readModsBinary)) : leewayCalculator.ReorderMods(modInput))}";
+                        Thread.Sleep(50);
                     }
-                    catch (Exception ex)
-                    {
-                        Console.ForegroundColor = ConsoleColor.Red;
-                        Console.WriteLine($"Error: {ex}");
-                        Console.ResetColor();
-                    }
-                    Console.WriteLine("If osu! is running, you can type \"current\" instead of the ID");
-                    Console.Write("Enter Beatmap ID (+Mods): ");
-                    input = Console.ReadLine().Trim();
+                } while (Console.ReadKey(true).Key != ConsoleKey.Escape);
+                PrintSettings(_settingsManager, true);
+                Console.Write("Input new mods, setting flags, or leave blank for 4 mod and then press ENTER to continue: ");
+                savedMods = modInput;
+
+                modInput = Console.ReadLine();
+                string afterSettings = ParseSettings(modInput);
+                bool settingsChanged = modInput != afterSettings;
+                modInput = afterSettings;
+                modInput = string.IsNullOrEmpty(modInput) ? (settingsChanged ? savedMods : "HDHRDTFL") : modInput;
+            }
+        }
+
+        private static void ManualMode(LeewayCalculator leewayCalculator)
+        {
+            Console.WriteLine("\nManual Mode");
+            Console.WriteLine("Add a \"!\" at the start to toggle auto-clear.");
+            Console.WriteLine("If osu! is running, you can type \"current\" instead of the ID to get the current map you are looking at in song select.");
+            Console.Write("Enter Beatmap ID (+Mods): ");
+
+            string input = Console.ReadLine().Trim();
+            bool flag = true;
+            while (true)
+            {
+                Console.WriteLine();
+                if (input.StartsWith("!"))
+                {
+                    flag = !flag;
+                    input = input.TrimStart('!');
                 }
+                if (flag)
+                    Console.Clear();
+                try
+                {
+                    string[] mods = null;
+                    string beatmap;
+                    int beatmapId;
+                    if (Regex.IsMatch(input, "^\"(.*?)\".*?([A-Za-z]+)?$"))
+                    {
+                        Match match = Regex.Match(input, "^\"(.*?)\".*?([A-Za-z]+)?$");
+                        beatmap = File.ReadAllText(match.Groups[1].Value);
+                        beatmapId = leewayCalculator.GetBeatmapID(beatmap);
+                        if (!string.IsNullOrEmpty(match.Groups[2].Value))
+                            mods = leewayCalculator.GetMods(leewayCalculator.ReorderMods(match.Groups[2].Value.ToUpper()));
+                    }
+                    else if (input.Split(' ')[0] == "current")
+                    {
+                        string newMods = input.Split(' ').Length == 1 ? "HDHRDTFL" : input.Split(' ')[1].ToUpper().Replace("+", "");
+                        mods = leewayCalculator.GetMods(leewayCalculator.ReorderMods(newMods));
+
+                        GetOsuProcess();
+                        CurrentBeatmap map = new CurrentBeatmap();
+                        _reader.TryReadProperty(map, "Id", out object ID);
+                        int mapId = (int)ID;
+                        _reader.TryReadProperty(map, "FolderName", out object mapFolder);
+                        _reader.TryReadProperty(map, "OsuFileName", out object mapFileName);
+                        string absoluteFilename = Path.Combine(_songsFolder, ((string)mapFolder).TrimEnd(), ((string)mapFileName).TrimEnd());
+                        beatmapId = mapId;
+                        beatmap = File.ReadAllText(absoluteFilename);
+                    }
+                    else
+                    {
+                        Match match = Regex.Match(input, ".*(?:\\D|^)(\\d+).*?([A-Za-z]+)?$");
+                        beatmapId = int.Parse(match.Groups[1].Value);
+                        beatmap = leewayCalculator.GetBeatmap(beatmapId);
+                        if (beatmap == "")
+                        {
+                            throw new Exception($"Unable to download beatmap with id {beatmapId}, does it exist? Got: empty beatmap");
+                        }
+                        mods = null;
+                        if (!string.IsNullOrEmpty(match.Groups[2].Value))
+                            mods = leewayCalculator.GetMods(leewayCalculator.ReorderMods(match.Groups[2].Value.ToUpper()));
+                    }
+                    if (!leewayCalculator.IsValidModCombo(mods))
+                        mods = null;
+                    Console.WriteLine("Manual Mode");
+                    Console.Title = $"AutomaticLeewayCalculator - Manual Mode - {beatmapId} +{leewayCalculator.ReorderMods(leewayCalculator.GetModsString(mods))}";
+                    leewayCalculator.PrintTable(beatmapId, beatmap, mods, true, _userName);
+                }
+                catch (Exception ex)
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine($"Error: {ex.Message}");
+                    Console.ResetColor();
+                }
+                Console.WriteLine("If osu! is running, you can type \"current\" instead of the ID");
+                Console.Write("Enter Beatmap ID (+Mods): ");
+                input = Console.ReadLine().Trim();
             }
         }
 
@@ -223,14 +221,14 @@ namespace LeewayCalculator
         private static string ModsFromBinaryString(string binaryString)
         {
             /*
-            Hardrock 27
+            Hardrock   27
             DoubleTime 25
-            Hidden 28
+            Hidden     28
             Flashlight 21
-            Easy 30
-            HalfTime 23
+            Easy       30
+            HalfTime   23
             */
-            string str = "";
+            string modString = "";
             for (int index = 0; index < binaryString.Length; ++index)
             {
                 if (binaryString[index] == '1')
@@ -238,27 +236,27 @@ namespace LeewayCalculator
                     switch (index)
                     {
                         case 21:
-                            str += "FL";
+                            modString += "FL";
                             break;
                         case 23:
-                            str += "HT";
+                            modString += "HT";
                             break;
                         case 25:
-                            str += "DT";
+                            modString += "DT";
                             break;
                         case 28:
-                            str += "HD";
+                            modString += "HD";
                             break;
                         case 27:
-                            str += "HR";
+                            modString += "HR";
                             break;
                         case 30:
-                            str += "EZ";
+                            modString += "EZ";
                             break;
                     }
                 }
             }
-            return str == "" ? "NM" : str;
+            return modString == "" ? "NM" : modString;
         }
         private static void GetOsuProcess()
         {
